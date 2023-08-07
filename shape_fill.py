@@ -40,7 +40,8 @@ class ShapeFillLine:
 
         lines = svg.Path()
         for x in x_coordinates:
-            lines.append(svg.Line(x + y_upper_limit * 1j, x + y_lower_limit * 1j))
+            one_line = svg.Line(x + y_upper_limit * 1j, x + y_lower_limit * 1j)
+            lines.append(one_line)
         lines = lines.rotated(degs=self.rotation, origin=center)
 
         return lines
@@ -72,11 +73,9 @@ class ShapeFillLine:
         direction_flag = -1
         for line, points in self.intersections_points.items():
             direction_flag *= -1
-            for i in range(0, len(points)-1, 2): # TODO: check if this is correct
-                if direction_flag == 1:
-                    filling_lines.append(svg.Line(points[i], points[i + 1]))
-                else:
-                    filling_lines.append(svg.Line(points[i + 1], points[i]))
+            temp = points[::direction_flag]
+            for i in range(0, len(points)-1, 2):
+                filling_lines.append(svg.Line(temp[i], temp[i + 1]))
 
         return filling_lines
 

@@ -69,17 +69,20 @@ G92 E0
         """
 
         # List of required argument names
-        required_arguments = ["point", "x", "y", "z"]
+        required_arguments = ["point", "x", "y", "z", "complex"]
 
         # Check if at least one of the required arguments is present in kwargs
         if not any([argument in kwargs for argument in required_arguments]):
-            raise Exception("You need to provide at least one of these arguments: point, x, y, z")
+            raise Exception("You need to provide at least one of these arguments: point, x, y, z, complex")
             # I don't really need to worry about this, because if none of the arguments are provided,
             # the function will return the current coordinates. But I'm leaving it here for fool-catching.
 
         if "point" in kwargs:
             # Extract x, y, and z from the "point" argument
             x, y, z = kwargs["point"]
+        elif "complex" in kwargs:
+            # Extract x, y from the "complex" argument
+            x, y, z = kwargs["complex"].real, kwargs["complex"].imag, self.coordinates[2]
         else:
             x, y, z = self.coordinates
 
