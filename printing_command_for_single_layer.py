@@ -1,13 +1,10 @@
 import numpy as np
-
-
-# I'm only giving first layer, I'm assuming that I won't print anything else for this code
-# that's why I only give +0.5mm safety distance in the z axis
+import warnings
 
 # TODO: re-write all comments that specify Z values. We don't care about it.
 
 class printer_commands:
-    def __init__(self):
+    def __init__(self, mode):
         self.bed_temp = 60
         self.extruder_temp = 200
         self.coordinates = np.array([0, 0, 0])
@@ -18,25 +15,26 @@ class printer_commands:
         self.fast_movement_speed = 5000
         self.printing_speed = 300
 
-        # self.rate = 0.1
-        # TODO: create a method that will be be called in __init__ to create the gcode in a cleaner way
-        self.gcode = \
-            f"""M140 S{self.bed_temp} ; Set bed temperature
-M105 ; Read current temp
-M190 S{self.bed_temp} ; Wait for bed temperature to be reached
-M104 S{self.extruder_temp} ; Set extruder temperature
-M105 ; Read current temp
-M109 S{self.extruder_temp} ; Wait for extruder temperature to be reached
-M82 ;absolute extrusion mode 
-G28 ; home all axes
-G92 E0 ; reset extruder
-G0 F2400 X20 Y20 Z20
-G0 Z0.2
-G0 X0 Y0
-G92 E0
-G28 ; home all axes
-G92 E0
-"""
+        self.gcode = ""
+        if mode not in ["printing", "injection"]:
+            raise Exception("The mode should be either 'printing' or 'injection'")
+        self.prepare_printer(mode)
+
+    def prepare_printer(self, mode):
+        if mode == "printing":
+            self.gcode += f"M140 S{self.bed_temp} ; Set bed temperature\n"
+            self.gcode += f"M104 S{self.extruder_temp} ; Set extruder temperature\n"
+            self.gcode += f"M105 ; Read current temp\n"
+            self.gcode += f"M190 S{self.bed_temp} ; Wait for bed temperature to be reached\n"
+            self.gcode += f"M109 S{self.extruder_temp} ; Wait for extruder temperature to be reached\n"
+            self.gcode += f"M82 ;absolute extrusion mode\n"
+            self.gcode += f"G28 ; home all axes\n"
+            self.gcode += f"G92 E0 ; reset extruder\n"
+
+        elif mode == "injection":
+            self.gcode += f"G28 ; home all axes\n"
+            self.gcode += f"G0 F100 Z50\n"
+            self.gcode += f"G0 F100 X90 Y90\n"
 
     def save_gcode(self, path):
         with open(path, 'w') as f:
@@ -45,6 +43,9 @@ G92 E0
     def wait(self, milliseconds):
         if milliseconds > 0:
             self.gcode += f"G4 P{milliseconds}\n"
+
+    def comment(self, comment):
+        self.gcode += f"; {comment}\n"
 
     def get_coordinates(self, **kwargs) -> tuple:
         """
@@ -241,14 +242,79 @@ G92 E0
         for move in list_of_movements:
             self.fast_movement(x=move[0], y=move[1], z=move[2])
 
+    def inject_on_line(self, start, end, **kwargs):
+        acceptable_args = ["injection_depth", "between_injection_length",
+                           "injection_speed", "transverse_speed",
+                           "halt_time", "injection_direction"]
+        for arg in kwargs:
+            if arg not in acceptable_args:
+                raise Exception(f"Unacceptable argument: {arg}")
 
+        xs, ys, zs = self.get_coordinates(complex=start)
+        xe, ye, ze = self.get_coordinates(complex=end)
 
+        if zs != ze:
+            warnings.warn("The start and end points are not on the same z-axis")
+            # meaningless warning, because I can't get z coordinates from complex!
+            # but left it here for any future changes!
+
+        between_injection_length = kwargs.get("between_injection_length", 0.5)
+        injection_speed = kwargs.get("injection_speed", 100)
+        transverse_speed = kwargs.get("transverse_speed", 100)
+        halt_time = kwargs.get("halt_time", 100)
+        injection_direction = kwargs.get("injection_direction", "up")
+        injection_depth = kwargs.get("injection_depth", 0.5)
+        if injection_direction not in ["up", "down"]:
+            raise Exception(f"Unacceptable injection_direction: {injection_direction}"
+                            f" injection_direction should be either 'up' or 'down'")
+
+        if injection_direction == "up":
+            injection_depth = -injection_depth
+
+        # get all the points between xs,ys,zs and xe,ye,ze with a distance of between_injection_length
+        ## Calculate direction vector of the line
+        direction = np.array([xe - xs, ye - ys, ze - zs])
+        magnitude = np.linalg.norm(direction)
+        direction = direction / magnitude  # Normalize the direction vector
+
+        ## Calculate the number of points needed
+        num_points = int(magnitude / between_injection_length)
+
+        ## Generate intermediate points along the line
+        injection_points = []
+        # TODO: also return the points to add them to the graph if needed
+        for i in range(1, num_points + 1):  # starting from 1 because I'll go there manually
+            xi = xs + i * between_injection_length * direction[0]
+            yi = ys + i * between_injection_length * direction[1]
+            zi = zs + i * between_injection_length * direction[2]
+            injection_points.append((xi, yi, zi))
+
+        # go to the first point
+        if (self.coordinates != np.array([xs, ys, zs])).any():
+            self.fast_go_to(x=xs, y=ys, z=zs, speed=transverse_speed)
+        # first injection
+        self.comment("first injection")
+        self.fast_movement(z=zs - injection_depth, speed=injection_speed)
+        self.wait(halt_time)
+        self.fast_movement(z=zs, speed=injection_speed)
+
+        # inject on the line
+        for point in injection_points:
+            self.fast_movement(x=point[0], y=point[1], z=point[2], speed=transverse_speed)
+            self.fast_movement(z=point[2] - injection_depth, speed=injection_speed)
+            self.wait(halt_time)
+            self.fast_movement(z=point[2], speed=injection_speed)
+
+        # head to the last point
+        if (injection_points[-1] != np.array([xe, ye, ze])).any():
+            self.comment("Going to the last point without injection")
+            self.fast_go_to(x=xe, y=ye, z=ze, speed=transverse_speed)
 
 if __name__ == '__main__':
     pass
 
-    commands = printer_commands()
-    commands.fast_movement(z=1, fast_movement_speed = 1000)
+    commands = printer_commands(mode="printing")
+    commands.fast_movement(z=1, fast_movement_speed=1000)
 
     commands.fast_go_to(x=10, y=10, z=0.2)
     commands.print_line(x=35, y=35, mode="sticky")
@@ -265,7 +331,7 @@ if __name__ == '__main__':
     commands.print_line(x=144.8, y=35.2, mode="sticky")
     commands.print_line(x=35.4, y=35.2, mode="sticky")
 
-    commands.fast_movement(z=2, fast_movement_speed = 1000)
+    commands.fast_movement(z=2, fast_movement_speed=1000)
     commands.fast_movement(x=90, y=90)
     commands.save_gcode('test_2.gcode')
     #
