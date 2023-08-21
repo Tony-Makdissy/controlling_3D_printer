@@ -11,7 +11,6 @@ import time
 
 class ShapeFillLine:
     def __init__(self, path, distance=2, rotation=0):
-        self.cnt = 0
         self.path = path
         self.distance = distance
         self.rotation = rotation
@@ -84,6 +83,14 @@ class ShapeFillLine:
 if __name__ == '__main__':
     circle_path = svg.Path(svg.Arc(start=45, radius=45 + 45j, rotation=0, large_arc=1, sweep=1, end=135),
                            svg.Arc(start=135, radius=45 + 45j, rotation=0, large_arc=1, sweep=1, end=45))
+
+    fill = ShapeFillLine(circle_path, rotation=90)
+    shapes = [*circle_path, *fill.filling_lines]
+    svg.disvg(shapes)
+    exit()
+
+
+
     paths, attributes, svg_attributes = svg.svg2paths2('bitmap_Layer 1_1.svg')
     wanted_path = paths[1]
 

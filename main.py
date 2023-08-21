@@ -1,16 +1,27 @@
-# This is a sample Python script.
+import shape_fill
+import svgpathtools as svg
+import simple_shapes_generator as ssg
+import time
+from printing_command_for_single_layer import printer_commands
 
-# Press Shift+F10 to execute it or replace it with your code.
-# Press Double Shift to search everywhere for classes, files, tool windows, actions, and settings.
-
-
-def print_hi(name):
-    # Use a breakpoint in the code line below to debug your script.
-    print(f'Hi, {name}')  # Press Ctrl+F8 to toggle the breakpoint.
-
-
-# Press the green button in the gutter to run the script.
 if __name__ == '__main__':
-    print_hi('PyCharm')
+    circle = ssg.shape_gen(shape="circle", center=90 + 90j, factor=6, rotation=0).get_shape()
 
-# See PyCharm help at https://www.jetbrains.com/help/pycharm/
+    fill = shape_fill.ShapeFillLine(circle, rotation=90, distance=0.3)
+    shapes = [*fill.filling_lines, *circle]
+
+    svg.disvg(shapes)
+    time.sleep(1)
+
+
+    commands = printer_commands()
+    commands.bed_temp = 0
+    commands.extruder_temp = 0
+    commands.fast_movement(x=90, y=90, z=3, fast_movement_speed=1000)
+
+    for line in fill.filling_lines:
+        commands.fast_movement(complex=line.start, fast_movement_speed=100)
+        commands.fast_movement(complex=line.end, fast_movement_speed=10)
+
+
+    commands.save_gcode('first_test_with_petri_dish.gcode')
